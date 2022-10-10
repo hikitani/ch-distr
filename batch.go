@@ -23,7 +23,7 @@ type batch[T any] struct {
 }
 
 func (b *batch[T]) append(v T) {
-	for i, field := range fieldsToSlice(reflect.ValueOf(v), b.structInfo) {
+	for i, field := range fieldsToSlice(reflect.ValueNoEscapeOf(v), b.structInfo) {
 		b.appenders[i](field, b.input)
 	}
 }
