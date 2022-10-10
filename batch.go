@@ -41,10 +41,6 @@ func newBatch[T any]() (*batch[T], error) {
 	case reflect.Struct:
 		structInfo = getStructInfo(refVal)
 		for i, field := range structInfo {
-			if fieldIsPrivate(field) {
-				continue
-			}
-
 			var name string
 			if tagVal, ok := field.Tag.Lookup("ch"); ok && tagVal == "-" {
 				continue
@@ -107,6 +103,10 @@ func getStructInfo(v reflect.Value) []reflect.StructField {
 	info := make([]reflect.StructField, 0, v.NumField())
 	typeInfo := v.Type()
 	for i := 0; i < v.NumField(); i++ {
+		if !v.CanInterface() {
+			continue
+		}
+
 		info = append(info, typeInfo.Field(i))
 	}
 	return info
@@ -117,7 +117,7 @@ func fieldsToSlice(v reflect.Value, structInfo []reflect.StructField) []any {
 
 	for i := 0; i < len(structInfo); i++ {
 		field := structInfo[i]
-		if fieldIsPrivate(field) {
+		if !v.CanInterface() {
 			continue
 		}
 
@@ -129,10 +129,6 @@ func fieldsToSlice(v reflect.Value, structInfo []reflect.StructField) []any {
 	}
 
 	return sample
-}
-
-func fieldIsPrivate(field reflect.StructField) bool {
-	return field.Name[0] >= 'a' && field.Name[0] <= 'z'
 }
 
 // https://gist.github.com/zxh/cee082053aa9674812e8cd4387088301
