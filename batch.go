@@ -50,9 +50,7 @@ func newBatch[T any]() (*batch[T], error) {
 				name = tagVal
 			}
 
-			typKind := field.Type.Kind()
-
-			col, err := getColFromTypeInfo(name, typKind)
+			col, err := getColFromField(name, field)
 			if err != nil {
 				return nil, fmt.Errorf("get input column: %s", err)
 			}
@@ -76,19 +74,7 @@ func newBatch[T any]() (*batch[T], error) {
 	}, nil
 }
 
-func getColFromTypeInfo(name string, kind reflect.Kind) (col proto.InputColumn, _ error) {
-	switch kind {
-	case reflect.Uint8:
-		col = proto.InputColumn{
-			Name: name,
-			Data: &proto.ColUInt8{},
-		}
-	}
-
-	return col, fmt.Errorf("")
-}
-
-func getAppenderToColFromTypeInfo(idx int, field reflect.StructField) (fn func(v any, input proto.Input), _ error) {
+func getAppenderToColFromTypeInfo(idx int, field reflect.StructField) (fn func(v any, input proto.Input), err error) {
 	switch field.Type.Kind() {
 	case reflect.Uint8:
 		fn = func(v any, input proto.Input) {
@@ -96,7 +82,7 @@ func getAppenderToColFromTypeInfo(idx int, field reflect.StructField) (fn func(v
 		}
 	}
 
-	return nil, fmt.Errorf("")
+	return nil, nil
 }
 
 func getStructInfo(v reflect.Value) []reflect.StructField {
