@@ -18,6 +18,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
+	github.com/jackc/puddle v1.2.2-0.20220404125616-4e959849469a // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
 	github.com/pascaldekloe/name v1.0.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.16 // indirect
