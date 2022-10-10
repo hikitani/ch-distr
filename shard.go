@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/ClickHouse/ch-go"
+	"github.com/ClickHouse/ch-go/chpool"
 	"go.uber.org/multierr"
 )
 
 type shard[T any] struct {
-	client *ch.Client
+	client *chpool.Pool
 	node   Node
 	pool   batchPool[T]
 }
@@ -25,10 +26,6 @@ func (s *shard[T]) start(
 	sharedBatches chan *batch[T],
 	stch chan<- Node,
 ) (err error) {
-	if s.client.IsClosed() {
-		return ch.ErrClosed
-	}
-
 	if flushInterval == 0 {
 		return errors.New("flush interval must be greater than zero")
 	}
@@ -58,6 +55,10 @@ func (s *shard[T]) start(
 			})
 
 			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					err = nil
+				}
+
 				sharedBatches <- b
 				errs <- err
 				return
@@ -73,18 +74,9 @@ loop:
 		case v := <-data:
 			b.append(v)
 		case sharedBatch := <-sharedBatches:
-			if s.client.IsClosed() {
-				err = ch.ErrClosed
-				break loop
-			}
-
 			execQuery(sharedBatch)
+			s.pool.put(sharedBatch)
 		case <-t.C:
-			if s.client.IsClosed() {
-				err = ch.ErrClosed
-				break loop
-			}
-
 			execQuery(b)
 
 			b, err = s.pool.get()
@@ -93,7 +85,7 @@ loop:
 				break loop
 			}
 		case <-ctx.Done():
-			err = ctx.Err()
+			err = nil
 			break loop
 		case err = <-errs:
 			break loop
@@ -115,11 +107,17 @@ func (s *shard[T]) getHostInfo(st NodeState) HostInfo {
 }
 
 func (s *shard[T]) close() error {
-	return s.client.Close()
+	s.client.Close()
+
+	return nil
 }
 
 func newShard[T any](ctx context.Context, node Node, opt ch.Options) (*shard[T], error) {
-	client, err := ch.Dial(ctx, opt)
+	client, err := chpool.Dial(ctx, chpool.Options{
+		ClientOptions: opt,
+		MinConns:      1,
+		MaxConns:      4,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("ch dial: %s", err)
 	}
@@ -130,7 +128,7 @@ func newShard[T any](ctx context.Context, node Node, opt ch.Options) (*shard[T],
 	}
 
 	return &shard[T]{
-		pool:   make(batchPool[T], 16),
+		pool:   make(batchPool[T], 4),
 		client: client,
 		node:   node,
 	}, nil
