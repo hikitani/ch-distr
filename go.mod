@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/ClickHouse/ch-go v0.48.0
 	github.com/goccy/go-reflect v1.2.0
+	github.com/google/uuid v1.3.0
 	github.com/stretchr/testify v1.8.0
 	go.uber.org/multierr v1.8.0
 )
@@ -16,7 +17,6 @@ require (
 	github.com/go-faster/errors v0.6.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/jackc/puddle v1.2.2-0.20220404125616-4e959849469a // indirect
 	github.com/klauspost/compress v1.15.9 // indirect

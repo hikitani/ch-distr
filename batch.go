@@ -18,7 +18,7 @@ var (
 
 type batch[T any] struct {
 	input      proto.Input
-	appenders  []func(v any, input proto.Input)
+	appenders  []appender
 	structInfo []reflect.StructField
 }
 
@@ -33,7 +33,7 @@ func newBatch[T any]() (*batch[T], error) {
 	refVal := reflect.Indirect(reflect.ValueOf(v))
 
 	var (
-		appenders  []func(v any, input proto.Input)
+		appenders  []appender
 		input      proto.Input
 		structInfo []reflect.StructField
 	)
@@ -42,24 +42,18 @@ func newBatch[T any]() (*batch[T], error) {
 		structInfo = getStructInfo(refVal)
 		for i, field := range structInfo {
 			var name string
-			if tagVal, ok := field.Tag.Lookup("ch"); ok && tagVal == "-" {
-				continue
-			} else if !ok {
+			if tagVal, ok := field.Tag.Lookup("ch"); !ok {
 				name = toUnderScore(field.Name)
 			} else {
 				name = tagVal
 			}
 
-			col, err := getColFromField(name, field)
+			col, appender, err := getColAndAppenderFromField(name, i, field)
 			if err != nil {
-				return nil, fmt.Errorf("get input column: %s", err)
+				return nil, fmt.Errorf("get input column and appender: %s", err)
 			}
-			input = append(input, col)
 
-			appender, err := getAppenderToColFromTypeInfo(i, field)
-			if err != nil {
-				return nil, fmt.Errorf("get appender: %s", err)
-			}
+			input = append(input, col)
 			appenders = append(appenders, appender)
 		}
 	case reflect.Invalid:
@@ -69,41 +63,18 @@ func newBatch[T any]() (*batch[T], error) {
 	}
 
 	return &batch[T]{
-		input:     input,
-		appenders: appenders,
+		input:      input,
+		appenders:  appenders,
+		structInfo: structInfo,
 	}, nil
-}
-
-func getAppenderToColFromTypeInfo(idx int, field reflect.StructField) (fn func(v any, input proto.Input), err error) {
-	switch field.Type.Kind() {
-	case reflect.Uint8:
-		fn = func(v any, input proto.Input) {
-			input[idx].Data.(proto.ColumnOf[uint8]).Append(v.(uint8))
-		}
-	}
-
-	return nil, nil
 }
 
 func getStructInfo(v reflect.Value) []reflect.StructField {
 	info := make([]reflect.StructField, 0, v.NumField())
 	typeInfo := v.Type()
 	for i := 0; i < v.NumField(); i++ {
-		if !v.CanInterface() {
-			continue
-		}
-
-		info = append(info, typeInfo.Field(i))
-	}
-	return info
-}
-
-func fieldsToSlice(v reflect.Value, structInfo []reflect.StructField) []any {
-	sample := make([]any, 0, len(structInfo))
-
-	for i := 0; i < len(structInfo); i++ {
-		field := structInfo[i]
-		if !v.CanInterface() {
+		field := typeInfo.Field(i)
+		if fieldIsPrivate(field) {
 			continue
 		}
 
@@ -111,10 +82,29 @@ func fieldsToSlice(v reflect.Value, structInfo []reflect.StructField) []any {
 			continue
 		}
 
-		sample = append(sample, v.Field(i).Interface())
+		if len(field.Index) != 1 {
+			continue
+		}
+
+		info = append(info, field)
+	}
+	return info
+}
+
+func fieldsToSlice(v reflect.Value, structInfo []reflect.StructField) []any {
+	sample := make([]any, len(structInfo))
+
+	for i := 0; i < len(structInfo); i++ {
+		field := structInfo[i]
+		sample[i] = v.Field(field.Index[0]).Interface()
 	}
 
 	return sample
+}
+
+func fieldIsPrivate(field reflect.StructField) bool {
+	b := field.Name[0]
+	return (b >= 'a' && b <= 'z') || b == '_'
 }
 
 // https://gist.github.com/zxh/cee082053aa9674812e8cd4387088301
