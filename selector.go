@@ -114,6 +114,12 @@ func (s *roundRobinSelector) removeHost(h HostInfo) error {
 	delete(s.hosts, hst)
 	delete(s.keysPos, hst)
 
+	for hst, pos := range s.keysPos {
+		if pos >= keyIdx+1 {
+			s.keysPos[hst] = pos - 1
+		}
+	}
+
 	return nil
 }
 
