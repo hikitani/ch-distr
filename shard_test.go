@@ -2,6 +2,7 @@ package chdistr
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -12,17 +13,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestShard(t *testing.T) {
-	type (
-		Foo struct {
-			Ts   time.Time
-			Ts6  proto.DateTime64
-			Foo  string
-			Bar  uint8
-			Long proto.UInt256
-		}
-	)
+type testStruct struct {
+	Ts   time.Time
+	Ts6  proto.DateTime64
+	Foo  string
+	Bar  uint8
+	Long proto.UInt256
+}
 
+func getTestConn(ctx context.Context, t testing.TB) *ch.Client {
 	const (
 		ddlCreate = `CREATE TABLE IF NOT EXISTS default.table_insert
 	(
@@ -37,7 +36,6 @@ func TestShard(t *testing.T) {
 		ddlDrop = "DROP TABLE IF EXISTS default.table_insert"
 	)
 
-	ctx := context.Background()
 	conn, err := ch.Dial(ctx, ch.Options{
 		Address: "127.0.0.1:9000",
 	})
@@ -58,7 +56,14 @@ func TestShard(t *testing.T) {
 		})
 	})
 
-	sh, err := newShard[Foo](ctx, NewHostInfo("localhost"), ch.Options{
+	return conn
+}
+
+func TestShard(t *testing.T) {
+	ctx := context.Background()
+	conn := getTestConn(ctx, t)
+
+	sh, err := newShard[testStruct](ctx, NewHostInfo("localhost"), ch.Options{
 		Address: "127.0.0.1:9000",
 	})
 	if err != nil {
@@ -67,13 +72,13 @@ func TestShard(t *testing.T) {
 	t.Cleanup(func() { sh.close() })
 
 	ctx, cancel := context.WithCancel(ctx)
-	datach := make(chan Foo)
-	sharedch := make(chan *batch[Foo], 1)
-	stch := make(chan<- Node, 2)
+	datach := make(chan testStruct)
+	sharedch := make(chan *batch[testStruct])
+	stch := make(chan<- Node, 1)
 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {
-		flushInterval := 500 * time.Millisecond
+		flushInterval := 100 * time.Millisecond
 		return sh.start(ctx, flushInterval, "table_insert", datach, sharedch, stch)
 	})
 
@@ -83,7 +88,7 @@ func TestShard(t *testing.T) {
 			case <-ctx.Done():
 				return
 			default:
-				datach <- Foo{
+				datach <- testStruct{
 					Ts:   time.Now(),
 					Ts6:  proto.ToDateTime64(time.Now(), proto.PrecisionMicro),
 					Foo:  randstr(10),
@@ -94,12 +99,14 @@ func TestShard(t *testing.T) {
 		}
 	}()
 
-	time.AfterFunc(time.Second, func() {
+	time.AfterFunc(200*time.Millisecond, func() {
 		cancel()
 	})
 
 	if err := errg.Wait(); err != nil {
-		t.Fatal("shard executing err: ", err)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatal("shard executing err: ", err)
+		}
 	}
 
 	ctx = context.Background()

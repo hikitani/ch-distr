@@ -30,13 +30,27 @@ func (s *shard[T]) start(
 		return errors.New("flush interval must be greater than zero")
 	}
 
+	if cap(stch) == 0 {
+		return errors.New("stch channel must be buffered")
+	}
+
 	errs := make(chan error)
 
 	t := time.NewTicker(flushInterval)
 	defer t.Stop()
 
 	stch <- s.getHostInfo(NodeUp)
-	defer func() { stch <- s.getHostInfo(NodeDown) }()
+	defer func() {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+
+		select {
+		case stch <- s.getHostInfo(NodeDown):
+		case <-ctx.Done():
+			err = multierr.Append(err, ctx.Err())
+		}
+	}()
 
 	b, err := s.pool.get()
 	if err != nil {
@@ -59,7 +73,11 @@ func (s *shard[T]) start(
 					err = nil
 				}
 
-				sharedBatches <- b
+				select {
+				case sharedBatches <- b:
+				case <-time.After(flushInterval / 2):
+				}
+
 				errs <- err
 				return
 			}
@@ -85,7 +103,7 @@ loop:
 				break loop
 			}
 		case <-ctx.Done():
-			err = nil
+			err = ctx.Err()
 			break loop
 		case err = <-errs:
 			break loop
