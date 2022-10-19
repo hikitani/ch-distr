@@ -117,7 +117,7 @@ func (s *roundRobinSelector) removeHost(h HostInfo) error {
 	return nil
 }
 
-func RoundRobinSelector() HostSelector[HostInfo] {
+func RoundRobinSelector() *roundRobinSelector {
 	return &roundRobinSelector{
 		keysPos: map[string]int{},
 		hosts:   map[string]HostInfo{},

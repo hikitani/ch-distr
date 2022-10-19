@@ -1,11 +1,218 @@
 package chdistr
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestRRobin_AddHostWithInvalidState(t *testing.T) {
+	s := RoundRobinSelector()
+	h := NewHostInfo("host1")
+	h.SetState(NodeDown)
+
+	assert.Error(t, s.AddHost(h))
+}
+
+func TestRRobin_AddHosts(t *testing.T) {
+	r := assert.New(t)
+	s := RoundRobinSelector()
+
+	for i := 0; i < 3; i++ {
+		name := fmt.Sprintf("host%d", i+1)
+		hst := NewHostInfo(name)
+		r.NoError(s.AddHost(hst))
+	}
+
+	r.Equal(map[string]HostInfo{
+		"host1": NewHostInfo("host1"),
+		"host2": NewHostInfo("host2"),
+		"host3": NewHostInfo("host3"),
+	}, s.hosts)
+
+	r.Equal(map[string]int{
+		"host1": 0,
+		"host2": 1,
+		"host3": 2,
+	}, s.keysPos)
+
+	r.Equal([]string{"host1", "host2", "host3"}, s.keys)
+}
+
+func TestRRobin_RemoveHostWithInvalidState(t *testing.T) {
+	s := RoundRobinSelector()
+	h := NewHostInfo("host1")
+	assert.NoError(t, s.AddHost(h))
+	assert.Error(t, s.RemoveHost(h))
+}
+
+func TestRRobin_RemoveNonexistentHost(t *testing.T) {
+	s := RoundRobinSelector()
+	h := NewHostInfo("host1")
+	h.SetState(NodeDown)
+	assert.NoError(t, s.RemoveHost(h))
+}
+
+func TestRRobin_RemoveLastHost(t *testing.T) {
+	r := assert.New(t)
+
+	cases := []struct {
+		addHosts     []string
+		removeHosts  []string
+		expectedKeys []string
+		expectedPos  map[string]int
+	}{
+		{
+			addHosts:     []string{},
+			removeHosts:  []string{"host1"},
+			expectedKeys: nil,
+			expectedPos:  map[string]int{},
+		},
+		{
+			addHosts:     []string{"host1"},
+			removeHosts:  []string{"host1"},
+			expectedKeys: []string{},
+			expectedPos:  map[string]int{},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host1"},
+			expectedKeys: []string{"host2", "host3"},
+			expectedPos:  map[string]int{"host2": 0, "host3": 1},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host2"},
+			expectedKeys: []string{"host1", "host3"},
+			expectedPos:  map[string]int{"host1": 0, "host3": 1},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host3"},
+			expectedKeys: []string{"host1", "host2"},
+			expectedPos:  map[string]int{"host1": 0, "host2": 1},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host1", "host2"},
+			expectedKeys: []string{"host3"},
+			expectedPos:  map[string]int{"host3": 0},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host1", "host3"},
+			expectedKeys: []string{"host2"},
+			expectedPos:  map[string]int{"host2": 0},
+		},
+		{
+			addHosts:     []string{"host1", "host2", "host3"},
+			removeHosts:  []string{"host2", "host3"},
+			expectedKeys: []string{"host1"},
+			expectedPos:  map[string]int{"host1": 0},
+		},
+	}
+
+	for i, testCase := range cases {
+		s := RoundRobinSelector()
+
+		for _, hostName := range testCase.addHosts {
+			h := NewHostInfo(hostName)
+			r.NoError(s.AddHost(h), "test case ", i)
+		}
+
+		for _, hostName := range testCase.removeHosts {
+			h := NewHostInfo(hostName)
+			h.SetState(NodeDown)
+			r.NoError(s.RemoveHost(h), "test case ", i)
+		}
+
+		r.Equal(testCase.expectedKeys, s.keys, "test case ", i)
+		r.Equal(testCase.expectedPos, s.keysPos, "test case ", i)
+	}
+}
+
+func TestRRobin_Pick(t *testing.T) {
+	r := assert.New(t)
+
+	newDownedHost := func(name string) HostInfo {
+		h := NewHostInfo(name)
+		h.SetState(NodeDown)
+		return h
+	}
+
+	cases := []struct {
+		addHosts    []HostInfo
+		removeHosts []HostInfo
+
+		expectedPicks []HostInfo
+	}{
+		{
+			addHosts: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host2"),
+				NewHostInfo("host3"),
+			},
+			expectedPicks: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host2"),
+				NewHostInfo("host3"),
+				NewHostInfo("host1"),
+				NewHostInfo("host2"),
+				NewHostInfo("host3"),
+			},
+		},
+		{
+			addHosts: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host2"),
+				NewHostInfo("host3"),
+			},
+			removeHosts: []HostInfo{
+				newDownedHost("host2"),
+			},
+			expectedPicks: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host3"),
+				NewHostInfo("host1"),
+				NewHostInfo("host3"),
+			},
+		},
+		{
+			addHosts: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host2"),
+				NewHostInfo("host3"),
+			},
+			removeHosts: []HostInfo{
+				newDownedHost("host2"),
+				newDownedHost("host3"),
+			},
+			expectedPicks: []HostInfo{
+				NewHostInfo("host1"),
+				NewHostInfo("host1"),
+				NewHostInfo("host1"),
+			},
+		},
+	}
+
+	for i, testCase := range cases {
+		s := RoundRobinSelector()
+
+		for _, h := range testCase.addHosts {
+			r.NoError(s.AddHost(h), "test case ", i)
+		}
+
+		for _, h := range testCase.removeHosts {
+			r.NoError(s.RemoveHost(h), "test case ", i)
+		}
+
+		for _, h := range testCase.expectedPicks {
+			r.Equal(h, s.Pick())
+		}
+	}
+}
 
 func TestWRR_AddZeroWeightHost(t *testing.T) {
 	s := WeightRoundRobinSelector()
