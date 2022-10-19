@@ -39,14 +39,14 @@ func (s *shard[T]) start(
 	t := time.NewTicker(flushInterval)
 	defer t.Stop()
 
-	stch <- s.getHostInfo(NodeUp)
+	stch <- s.node.SetState(NodeUp)
 	defer func() {
 		if errors.Is(err, context.Canceled) {
 			return
 		}
 
 		select {
-		case stch <- s.getHostInfo(NodeDown):
+		case stch <- s.node.SetState(NodeDown):
 		case <-ctx.Done():
 			err = multierr.Append(err, ctx.Err())
 		}
@@ -115,13 +115,6 @@ loop:
 	}
 
 	return err
-}
-
-func (s *shard[T]) getHostInfo(st NodeState) HostInfo {
-	h := s.node.Info()
-	h.SetState(st)
-
-	return h
 }
 
 func (s *shard[T]) close() error {

@@ -15,11 +15,12 @@ func (s NodeState) String() string {
 
 type Node interface {
 	Info() HostInfo
+	SetState(s NodeState) Node
 }
 
 var (
-	_ Node = HostInfo{}
-	_ Node = WeightHostInfo{}
+	_ Node = &HostInfo{}
+	_ Node = &WeightHostInfo{}
 )
 
 type HostInfo struct {
@@ -35,8 +36,9 @@ func (h *HostInfo) State() NodeState {
 	return h.state
 }
 
-func (h *HostInfo) SetState(s NodeState) {
+func (h HostInfo) SetState(s NodeState) Node {
 	h.state = s
+	return h
 }
 
 func (h HostInfo) Info() HostInfo {
@@ -45,9 +47,13 @@ func (h HostInfo) Info() HostInfo {
 
 // Creates HostInfo with NodeUp state.
 func NewHostInfo(hostname string) HostInfo {
+	return NewHostInfoWithState(hostname, NodeUp)
+}
+
+func NewHostInfoWithState(hostname string, state NodeState) HostInfo {
 	return HostInfo{
 		hostname: hostname,
-		state:    NodeUp,
+		state:    state,
 	}
 }
 
@@ -61,14 +67,23 @@ func (h WeightHostInfo) Info() HostInfo {
 	return h.HostInfo
 }
 
+func (h WeightHostInfo) SetState(s NodeState) Node {
+	h.HostInfo.state = s
+	return h
+}
+
 func (h *WeightHostInfo) Weight() uint32 {
 	return h.weight
 }
 
 // Creates WeightHostInfo with NodeUp state.
 func NewWeightHostInfo(hostname string, weight uint32) WeightHostInfo {
+	return NewWeightHostInfoWithState(hostname, weight, NodeUp)
+}
+
+func NewWeightHostInfoWithState(hostname string, weight uint32, state NodeState) WeightHostInfo {
 	return WeightHostInfo{
-		HostInfo: NewHostInfo(hostname),
+		HostInfo: NewHostInfoWithState(hostname, state),
 		weight:   weight,
 	}
 }

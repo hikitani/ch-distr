@@ -23,18 +23,18 @@ type HostSelector[T Node] interface {
 	Pick() HostInfo
 }
 
-func ListenStates[T Node](ctx context.Context, controller HostStateController[T], stch <-chan T) error {
+func ListenStates[T Node](ctx context.Context, controller HostStateController[T], stch <-chan Node) error {
 	for {
 		select {
 		case h := <-stch:
 			hi := h.Info()
 			switch hi.State() {
 			case NodeUp:
-				if err := controller.AddHost(h); err != nil {
+				if err := controller.AddHost(h.(T)); err != nil {
 					return fmt.Errorf("add host: %s", err)
 				}
 			case NodeDown:
-				if err := controller.RemoveHost(h); err != nil {
+				if err := controller.RemoveHost(h.(T)); err != nil {
 					return fmt.Errorf("remove host: %s", err)
 				}
 			}
@@ -208,7 +208,7 @@ func (s *wRoundRobinSelector) addHost(h WeightHostInfo) error {
 	if st := h.State(); st == NodeDown {
 		return fmt.Errorf("host %s must have %s state, but got %s", hst, NodeUp, st)
 	} else {
-		hinfo.SetState(st)
+		*hinfo = hinfo.SetState(st).(WeightHostInfo)
 	}
 
 	if hinfo.Weight() == h.Weight() {
@@ -273,7 +273,7 @@ func (s *wRoundRobinSelector) removeHost(h WeightHostInfo) error {
 		return nil
 	}
 
-	hinfo.SetState(h.State())
+	*hinfo = hinfo.SetState(h.State()).(WeightHostInfo)
 
 	return nil
 }
