@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/ClickHouse/ch-go v0.48.0
+	github.com/alphadose/haxmap v1.1.0
 	github.com/goccy/go-reflect v1.2.0
 	github.com/google/uuid v1.3.0
 	github.com/stretchr/testify v1.8.0

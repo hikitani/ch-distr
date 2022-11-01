@@ -1,5 +1,7 @@
 github.com/ClickHouse/ch-go v0.48.0 h1:7BIWp+vynGeIEXNtN3K0WQdSgmYAxM+GENnCtTnwN5M=
 github.com/ClickHouse/ch-go v0.48.0/go.mod h1:KBY72ltlOlHelc4Jn4hlReP8Caek8d6RG4ZkoPsWxzc=
+github.com/alphadose/haxmap v1.1.0 h1:M7Dxdr+civMQkWCgDpoktNpLofDBz7XzdS3rF3Y6r4U=
+github.com/alphadose/haxmap v1.1.0/go.mod h1:Pq2IXbl9/ytYHfrIAd7rIVtZQ2ezdIhZfvdqOizDeWY=
 github.com/benbjohnson/clock v1.1.0 h1:Q92kusRqC1XV2MjkWETPvjJVqKetz1OzxZB7mHJLju8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
