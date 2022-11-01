@@ -14,7 +14,7 @@ import (
 
 type shard[T any] struct {
 	client *chpool.Pool
-	node   Node
+	host   Host
 	pool   batchPool[T]
 }
 
@@ -24,7 +24,7 @@ func (s *shard[T]) start(
 	table string,
 	data <-chan T,
 	sharedBatches chan *batch[T],
-	stch chan<- Node,
+	stch chan<- Host,
 ) (err error) {
 	if flushInterval == 0 {
 		return errors.New("flush interval must be greater than zero")
@@ -39,14 +39,20 @@ func (s *shard[T]) start(
 	t := time.NewTicker(flushInterval)
 	defer t.Stop()
 
-	stch <- s.node.SetState(NodeUp)
+	select {
+	case stch <- s.host.SetState(HostUp):
+	case <-ctx.Done():
+		err = multierr.Append(err, ctx.Err())
+		return
+	}
+
 	defer func() {
 		if errors.Is(err, context.Canceled) {
 			return
 		}
 
 		select {
-		case stch <- s.node.SetState(NodeDown):
+		case stch <- s.host.SetState(HostDown):
 		case <-ctx.Done():
 			err = multierr.Append(err, ctx.Err())
 		}
@@ -54,7 +60,7 @@ func (s *shard[T]) start(
 
 	b, err := s.pool.get()
 	if err != nil {
-		return fmt.Errorf("get batch from pool: %s", err)
+		return fmt.Errorf("get batch from pool: %w", err)
 	}
 
 	var wg int32
@@ -99,7 +105,7 @@ loop:
 
 			b, err = s.pool.get()
 			if err != nil {
-				err = fmt.Errorf("get batch from pool: %s", err)
+				err = fmt.Errorf("get batch from pool: %w", err)
 				break loop
 			}
 		case <-ctx.Done():
@@ -123,25 +129,25 @@ func (s *shard[T]) close() error {
 	return nil
 }
 
-func newShard[T any](ctx context.Context, node Node, opt ch.Options) (*shard[T], error) {
+func newShard[T any](ctx context.Context, host Host, opt ch.Options) (*shard[T], error) {
 	client, err := chpool.Dial(ctx, chpool.Options{
 		ClientOptions: opt,
 		MinConns:      1,
 		MaxConns:      4,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("ch dial: %s", err)
+		return nil, fmt.Errorf("ch dial: %w", err)
 	}
 
 	// Generic checking
 	if _, err := newBatch[T](); err != nil {
-		return nil, fmt.Errorf("batch init: %s", err)
+		return nil, fmt.Errorf("batch init: %w", err)
 	}
 
 	return &shard[T]{
 		pool:   make(batchPool[T], 4),
 		client: client,
-		node:   node,
+		host:   host,
 	}, nil
 }
 

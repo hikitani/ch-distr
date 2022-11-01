@@ -10,7 +10,7 @@ import (
 
 func TestRRobin_AddHostWithInvalidState(t *testing.T) {
 	s := RoundRobinSelector()
-	h := NewHostInfoWithState("host1", NodeDown)
+	h := NewHostInfoWithState("host1", "default", HostDown)
 
 	assert.Error(t, s.AddHost(h))
 }
@@ -18,38 +18,40 @@ func TestRRobin_AddHostWithInvalidState(t *testing.T) {
 func TestRRobin_AddHosts(t *testing.T) {
 	r := assert.New(t)
 	s := RoundRobinSelector()
+	db := "default"
+	withDB := func(v string) string { return v + db }
 
 	for i := 0; i < 3; i++ {
 		name := fmt.Sprintf("host%d", i+1)
-		hst := NewHostInfo(name)
+		hst := NewHostInfo(name, db)
 		r.NoError(s.AddHost(hst))
 	}
 
 	r.Equal(map[string]HostInfo{
-		"host1": NewHostInfo("host1"),
-		"host2": NewHostInfo("host2"),
-		"host3": NewHostInfo("host3"),
+		withDB("host1"): NewHostInfo("host1", db),
+		withDB("host2"): NewHostInfo("host2", db),
+		withDB("host3"): NewHostInfo("host3", db),
 	}, s.hosts)
 
 	r.Equal(map[string]int{
-		"host1": 0,
-		"host2": 1,
-		"host3": 2,
+		withDB("host1"): 0,
+		withDB("host2"): 1,
+		withDB("host3"): 2,
 	}, s.keysPos)
 
-	r.Equal([]string{"host1", "host2", "host3"}, s.keys)
+	r.Equal([]string{withDB("host1"), withDB("host2"), withDB("host3")}, s.keys)
 }
 
 func TestRRobin_RemoveHostWithInvalidState(t *testing.T) {
 	s := RoundRobinSelector()
-	h := NewHostInfo("host1")
+	h := NewHostInfo("host1", "default")
 	assert.NoError(t, s.AddHost(h))
 	assert.Error(t, s.RemoveHost(h))
 }
 
 func TestRRobin_RemoveNonexistentHost(t *testing.T) {
 	s := RoundRobinSelector()
-	h := NewHostInfoWithState("host1", NodeDown)
+	h := NewHostInfoWithState("host1", "default", HostDown)
 	assert.NoError(t, s.RemoveHost(h))
 }
 
@@ -116,12 +118,12 @@ func TestRRobin_RemoveLastHost(t *testing.T) {
 		s := RoundRobinSelector()
 
 		for _, hostName := range testCase.addHosts {
-			h := NewHostInfo(hostName)
+			h := NewHostInfo(hostName, "")
 			r.NoError(s.AddHost(h), "test case ", i)
 		}
 
 		for _, hostName := range testCase.removeHosts {
-			h := NewHostInfoWithState(hostName, NodeDown)
+			h := NewHostInfoWithState(hostName, "", HostDown)
 			r.NoError(s.RemoveHost(h), "test case ", i)
 		}
 
@@ -132,6 +134,7 @@ func TestRRobin_RemoveLastHost(t *testing.T) {
 
 func TestRRobin_Pick(t *testing.T) {
 	r := assert.New(t)
+	db := "default"
 
 	cases := []struct {
 		addHosts    []HostInfo
@@ -141,49 +144,49 @@ func TestRRobin_Pick(t *testing.T) {
 	}{
 		{
 			addHosts: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host2"),
-				NewHostInfo("host3"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host2", db),
+				NewHostInfo("host3", db),
 			},
 			expectedPicks: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host2"),
-				NewHostInfo("host3"),
-				NewHostInfo("host1"),
-				NewHostInfo("host2"),
-				NewHostInfo("host3"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host2", db),
+				NewHostInfo("host3", db),
+				NewHostInfo("host1", db),
+				NewHostInfo("host2", db),
+				NewHostInfo("host3", db),
 			},
 		},
 		{
 			addHosts: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host2"),
-				NewHostInfo("host3"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host2", db),
+				NewHostInfo("host3", db),
 			},
 			removeHosts: []HostInfo{
-				NewHostInfoWithState("host2", NodeDown),
+				NewHostInfoWithState("host2", db, HostDown),
 			},
 			expectedPicks: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host3"),
-				NewHostInfo("host1"),
-				NewHostInfo("host3"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host3", db),
+				NewHostInfo("host1", db),
+				NewHostInfo("host3", db),
 			},
 		},
 		{
 			addHosts: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host2"),
-				NewHostInfo("host3"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host2", db),
+				NewHostInfo("host3", db),
 			},
 			removeHosts: []HostInfo{
-				NewHostInfoWithState("host2", NodeDown),
-				NewHostInfoWithState("host3", NodeDown),
+				NewHostInfoWithState("host2", db, HostDown),
+				NewHostInfoWithState("host3", db, HostDown),
 			},
 			expectedPicks: []HostInfo{
-				NewHostInfo("host1"),
-				NewHostInfo("host1"),
-				NewHostInfo("host1"),
+				NewHostInfo("host1", db),
+				NewHostInfo("host1", db),
+				NewHostInfo("host1", db),
 			},
 		},
 	}
@@ -207,12 +210,12 @@ func TestRRobin_Pick(t *testing.T) {
 
 func TestWRR_AddZeroWeightHost(t *testing.T) {
 	s := WeightRoundRobinSelector()
-	assert.Error(t, s.AddHost(NewWeightHostInfo("host1", 0)))
+	assert.Error(t, s.AddHost(NewWeightHostInfo("host1", "default", 0)))
 }
 
 func TestWRR_AddHostWithInvalidState(t *testing.T) {
 	s := WeightRoundRobinSelector()
-	h := NewWeightHostInfoWithState("host1", 1, NodeDown)
+	h := NewWeightHostInfoWithState("host1", "default", 1, HostDown)
 	assert.Error(t, s.AddHost(h))
 }
 
@@ -232,11 +235,11 @@ func TestWRR_AddNonZeroWeightHost(t *testing.T) {
 
 	for _, testCase := range cases {
 		s := WeightRoundRobinSelector()
-		r.NoError(s.AddHost(NewWeightHostInfo(testCase.host, testCase.weight)))
+		r.NoError(s.AddHost(NewWeightHostInfo(testCase.host, "", testCase.weight)))
 
 		r.Equal(len(s.hosts), 1)
 		h := s.hosts[testCase.host]
-		r.Equal(*h, NewWeightHostInfo(testCase.host, testCase.weight))
+		r.Equal(*h, NewWeightHostInfo(testCase.host, "", testCase.weight))
 
 		r.Equal(len(s.rangePos), 1)
 		rangePos := s.rangePos[testCase.host]
@@ -257,6 +260,7 @@ func TestWRR_AddNonZeroWeightHost(t *testing.T) {
 
 func TestWRR_AddSecondHost(t *testing.T) {
 	r := assert.New(t)
+	db := "default"
 
 	cases := []struct {
 		host1        WeightHostInfo
@@ -268,8 +272,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 		}
 	}{
 		{
-			host1:        NewWeightHostInfo("host1", 1),
-			host2:        NewWeightHostInfo("host2", 1),
+			host1:        NewWeightHostInfo("host1", db, 1),
+			host2:        NewWeightHostInfo("host2", db, 1),
 			expectedOwns: []int{0, 1},
 			ranges: []struct {
 				begin uint32
@@ -280,8 +284,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 			},
 		},
 		{
-			host1:        NewWeightHostInfo("host1", 1),
-			host2:        NewWeightHostInfo("host2", 2),
+			host1:        NewWeightHostInfo("host1", db, 1),
+			host2:        NewWeightHostInfo("host2", db, 2),
 			expectedOwns: []int{0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -292,8 +296,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 			},
 		},
 		{
-			host1:        NewWeightHostInfo("host1", 2),
-			host2:        NewWeightHostInfo("host2", 1),
+			host1:        NewWeightHostInfo("host1", db, 2),
+			host2:        NewWeightHostInfo("host2", db, 1),
 			expectedOwns: []int{0, 0, 1},
 			ranges: []struct {
 				begin uint32
@@ -304,8 +308,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 			},
 		},
 		{
-			host1:        NewWeightHostInfo("host1", 2),
-			host2:        NewWeightHostInfo("host2", 2),
+			host1:        NewWeightHostInfo("host1", db, 2),
+			host2:        NewWeightHostInfo("host2", db, 2),
 			expectedOwns: []int{0, 0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -316,8 +320,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 			},
 		},
 		{
-			host1:        NewWeightHostInfo("host1", 2),
-			host2:        NewWeightHostInfo("host2", 4),
+			host1:        NewWeightHostInfo("host1", db, 2),
+			host2:        NewWeightHostInfo("host2", db, 4),
 			expectedOwns: []int{0, 0, 1, 1, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -328,8 +332,8 @@ func TestWRR_AddSecondHost(t *testing.T) {
 			},
 		},
 		{
-			host1:        NewWeightHostInfo("host1", 4),
-			host2:        NewWeightHostInfo("host2", 2),
+			host1:        NewWeightHostInfo("host1", db, 4),
+			host2:        NewWeightHostInfo("host2", db, 2),
 			expectedOwns: []int{0, 0, 0, 0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -348,12 +352,12 @@ func TestWRR_AddSecondHost(t *testing.T) {
 		r.NoError(s.AddHost(testCase.host2))
 		r.Equal(testCase.ranges, s.ranges)
 
-		h1 := s.hosts[testCase.host1.Hostname()]
-		h2 := s.hosts[testCase.host2.Hostname()]
+		h1 := s.hosts[testCase.host1.ID()]
+		h2 := s.hosts[testCase.host2.ID()]
 
 		r.Equal(map[string]int{
-			testCase.host1.Hostname(): 0,
-			testCase.host2.Hostname(): 1,
+			testCase.host1.ID(): 0,
+			testCase.host2.ID(): 1,
 		}, s.rangePos)
 
 		var expectedOwns []*WeightHostInfo
@@ -377,10 +381,12 @@ func TestWRR_LastHostWeightChanged(t *testing.T) {
 
 	hostname1 := "host1"
 	hostname2 := "host2"
+	db := "default"
+	withDB := func(v string) string { return v + db }
 	newSelectorWithHosts := func() *wRoundRobinSelector {
 		s := WeightRoundRobinSelector()
-		s.AddHost(NewWeightHostInfo(hostname1, 2))
-		s.AddHost(NewWeightHostInfo(hostname2, 1))
+		s.AddHost(NewWeightHostInfo(hostname1, db, 2))
+		s.AddHost(NewWeightHostInfo(hostname2, db, 1))
 
 		return s
 	}
@@ -394,7 +400,7 @@ func TestWRR_LastHostWeightChanged(t *testing.T) {
 		}
 	}{
 		{
-			host:         NewWeightHostInfo(hostname2, 1),
+			host:         NewWeightHostInfo(hostname2, db, 1),
 			expectedOwns: []int{0, 0, 1},
 			ranges: []struct {
 				begin uint32
@@ -405,7 +411,7 @@ func TestWRR_LastHostWeightChanged(t *testing.T) {
 			},
 		},
 		{
-			host:         NewWeightHostInfo(hostname2, 3),
+			host:         NewWeightHostInfo(hostname2, db, 3),
 			expectedOwns: []int{0, 0, 1, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -416,7 +422,7 @@ func TestWRR_LastHostWeightChanged(t *testing.T) {
 			},
 		},
 		{
-			host:         NewWeightHostInfo(hostname2, 5),
+			host:         NewWeightHostInfo(hostname2, db, 5),
 			expectedOwns: []int{0, 0, 1, 1, 1, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -434,12 +440,12 @@ func TestWRR_LastHostWeightChanged(t *testing.T) {
 
 		r.Equal(testCase.ranges, s.ranges)
 
-		h1 := s.hosts[hostname1]
-		h2 := s.hosts[hostname2]
+		h1 := s.hosts[withDB(hostname1)]
+		h2 := s.hosts[withDB(hostname2)]
 
 		r.Equal(map[string]int{
-			hostname1: 0,
-			hostname2: 1,
+			withDB(hostname1): 0,
+			withDB(hostname2): 1,
 		}, s.rangePos)
 
 		var expectedOwns []*WeightHostInfo
@@ -463,10 +469,12 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 
 	hostname1 := "host1"
 	hostname2 := "host2"
+	db := "default"
+	withDB := func(v string) string { return v + db }
 	newSelectorWithHosts := func() *wRoundRobinSelector {
 		s := WeightRoundRobinSelector()
-		s.AddHost(NewWeightHostInfo(hostname1, 2))
-		s.AddHost(NewWeightHostInfo(hostname2, 2))
+		s.AddHost(NewWeightHostInfo(hostname1, db, 2))
+		s.AddHost(NewWeightHostInfo(hostname2, db, 2))
 
 		return s
 	}
@@ -480,7 +488,7 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 		}
 	}{
 		{
-			host:         NewWeightHostInfo(hostname1, 1),
+			host:         NewWeightHostInfo(hostname1, db, 1),
 			expectedOwns: []int{0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -491,7 +499,7 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 			},
 		},
 		{
-			host:         NewWeightHostInfo(hostname1, 3),
+			host:         NewWeightHostInfo(hostname1, db, 3),
 			expectedOwns: []int{0, 0, 0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -502,7 +510,7 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 			},
 		},
 		{
-			host:         NewWeightHostInfo(hostname1, 5),
+			host:         NewWeightHostInfo(hostname1, db, 5),
 			expectedOwns: []int{0, 0, 0, 0, 0, 1, 1},
 			ranges: []struct {
 				begin uint32
@@ -520,12 +528,12 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 
 		r.Equal(testCase.ranges, s.ranges)
 
-		h1 := s.hosts[hostname1]
-		h2 := s.hosts[hostname2]
+		h1 := s.hosts[withDB(hostname1)]
+		h2 := s.hosts[withDB(hostname2)]
 
 		r.Equal(map[string]int{
-			hostname1: 0,
-			hostname2: 1,
+			withDB(hostname1): 0,
+			withDB(hostname2): 1,
 		}, s.rangePos)
 
 		var expectedOwns []*WeightHostInfo
@@ -546,64 +554,66 @@ func TestWRR_FirstHostWeightChanged(t *testing.T) {
 
 func TestWRR_RemoveHostWithInvalidState(t *testing.T) {
 	s := WeightRoundRobinSelector()
-	h := NewWeightHostInfo("host1", 1)
+	h := NewWeightHostInfo("host1", "default", 1)
 
 	assert.Error(t, s.RemoveHost(h))
 }
 
 func TestWRR_RemoveHostThatDoesntExist(t *testing.T) {
 	s := WeightRoundRobinSelector()
-	h := NewWeightHostInfoWithState("host1", 1, NodeDown)
+	h := NewWeightHostInfoWithState("host1", "default", 1, HostDown)
 	assert.NoError(t, s.RemoveHost(h))
 }
 
 func TestWRR_RemoveHost(t *testing.T) {
 	r := assert.New(t)
 
+	db := "default"
+	withDB := func(v string) string { return v + db }
 	cases := []struct {
 		addHosts    []WeightHostInfo
 		removeHosts []WeightHostInfo
 
-		expectedStates map[string]NodeState
+		expectedStates map[string]HostState
 	}{
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
+				NewWeightHostInfo("1", db, 1),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("1", 1, NodeDown),
+				NewWeightHostInfoWithState("1", db, 1, HostDown),
 			},
-			expectedStates: map[string]NodeState{
-				"1": NodeDown,
+			expectedStates: map[string]HostState{
+				withDB("1"): HostDown,
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 1),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 1),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("1", 1, NodeDown),
+				NewWeightHostInfoWithState("1", db, 1, HostDown),
 			},
-			expectedStates: map[string]NodeState{
-				"1": NodeDown,
-				"2": NodeUp,
+			expectedStates: map[string]HostState{
+				withDB("1"): HostDown,
+				withDB("2"): HostUp,
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 1),
-				NewWeightHostInfo("3", 1),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 1),
+				NewWeightHostInfo("3", db, 1),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("1", 1, NodeDown),
-				NewWeightHostInfoWithState("2", 1, NodeDown),
+				NewWeightHostInfoWithState("1", db, 1, HostDown),
+				NewWeightHostInfoWithState("2", db, 1, HostDown),
 			},
-			expectedStates: map[string]NodeState{
-				"1": NodeDown,
-				"2": NodeDown,
-				"3": NodeUp,
+			expectedStates: map[string]HostState{
+				withDB("1"): HostDown,
+				withDB("2"): HostDown,
+				withDB("3"): HostUp,
 			},
 		},
 	}
@@ -619,9 +629,9 @@ func TestWRR_RemoveHost(t *testing.T) {
 			r.NoError(s.RemoveHost(h))
 		}
 
-		states := map[string]NodeState{}
+		states := map[string]HostState{}
 		for k, h := range s.hosts {
-			states[k] = h.State()
+			states[k] = h.State
 		}
 
 		r.Equal(testCase.expectedStates, states)
@@ -631,6 +641,7 @@ func TestWRR_RemoveHost(t *testing.T) {
 func TestWRR_Pick(t *testing.T) {
 	r := assert.New(t)
 
+	db := "default"
 	cases := []struct {
 		addHosts    []WeightHostInfo
 		removeHosts []WeightHostInfo
@@ -639,147 +650,147 @@ func TestWRR_Pick(t *testing.T) {
 	}{
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
+				NewWeightHostInfo("1", db, 1),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"1", NodeUp},
-				{"1", NodeUp},
+				{"1", db, HostUp},
+				{"1", db, HostUp},
+				{"1", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"1", NodeUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"1", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"1", NodeUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"1", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("1", 1, NodeDown),
+				NewWeightHostInfoWithState("1", db, 1, HostDown),
 			},
 
 			expectedPicks: []HostInfo{
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"2", NodeUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"2", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("2", 1, NodeDown),
+				NewWeightHostInfoWithState("2", db, 1, HostDown),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"1", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
-				{"3", NodeUp},
+				{"1", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"1", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
+				{"3", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("3", 1, NodeDown),
+				NewWeightHostInfoWithState("3", db, 1, HostDown),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"1", NodeUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"1", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("1", 1, NodeDown),
-				NewWeightHostInfoWithState("3", 1, NodeDown),
+				NewWeightHostInfoWithState("1", db, 1, HostDown),
+				NewWeightHostInfoWithState("3", db, 1, HostDown),
 			},
 
 			expectedPicks: []HostInfo{
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
 			},
 		},
 		{
 			addHosts: []WeightHostInfo{
-				NewWeightHostInfo("1", 1),
-				NewWeightHostInfo("2", 2),
-				NewWeightHostInfo("3", 3),
-				NewWeightHostInfo("1", 3),
+				NewWeightHostInfo("1", db, 1),
+				NewWeightHostInfo("2", db, 2),
+				NewWeightHostInfo("3", db, 3),
+				NewWeightHostInfo("1", db, 3),
 			},
 			removeHosts: []WeightHostInfo{
-				NewWeightHostInfoWithState("3", 1, NodeDown),
+				NewWeightHostInfoWithState("3", db, 1, HostDown),
 			},
 
 			expectedPicks: []HostInfo{
-				{"1", NodeUp},
-				{"1", NodeUp},
-				{"1", NodeUp},
-				{"2", NodeUp},
-				{"2", NodeUp},
+				{"1", db, HostUp},
+				{"1", db, HostUp},
+				{"1", db, HostUp},
+				{"2", db, HostUp},
+				{"2", db, HostUp},
 			},
 		},
 	}
@@ -807,9 +818,9 @@ func TestWRR_PickWhenAllHostsIsDown(t *testing.T) {
 
 	hosts := map[HostInfo]struct{}{}
 	for i := 0; i < 100; i++ {
-		h := NewWeightHostInfo(strconv.Itoa(i), 1)
+		h := NewWeightHostInfo(strconv.Itoa(i), "default", 1)
 		r.NoError(s.AddHost(h))
-		h = h.SetState(NodeDown).(WeightHostInfo)
+		h = h.SetState(HostDown).(WeightHostInfo)
 		r.NoError(s.RemoveHost(h))
 
 		hosts[h.Info()] = struct{}{}

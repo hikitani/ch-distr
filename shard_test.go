@@ -63,8 +63,9 @@ func TestShard(t *testing.T) {
 	ctx := context.Background()
 	conn := getTestConn(ctx, t)
 
-	sh, err := newShard[testStruct](ctx, NewHostInfo("localhost"), ch.Options{
-		Address: "127.0.0.1:9000",
+	sh, err := newShard[testStruct](ctx, NewHostInfo("127.0.0.1:9000", "default"), ch.Options{
+		Address:  "127.0.0.1:9000",
+		Database: "default",
 	})
 	if err != nil {
 		t.Fatal("create shard: ", err)
@@ -74,7 +75,7 @@ func TestShard(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	datach := make(chan testStruct)
 	sharedch := make(chan *batch[testStruct])
-	stch := make(chan<- Node, 1)
+	stch := make(chan<- Host, 1)
 
 	errg, ctx := errgroup.WithContext(ctx)
 	errg.Go(func() error {

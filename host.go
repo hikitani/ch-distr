@@ -1,43 +1,39 @@
 package chdistr
 
-type NodeState uint32
+import "fmt"
+
+type HostState uint32
 
 const (
-	NodeUp NodeState = iota
-	NodeDown
+	HostUp HostState = iota
+	HostDown
 )
 
-var nodeStateStrings = [...]string{"NODE_UP", "NODE_DOWN"}
+var hostStateStrings = [...]string{"HOST_UP", "HOST_DOWN"}
 
-func (s NodeState) String() string {
-	return nodeStateStrings[s]
+func (s HostState) String() string {
+	return hostStateStrings[s]
 }
 
-type Node interface {
+type Host interface {
 	Info() HostInfo
-	SetState(s NodeState) Node
+	SetState(s HostState) Host
 }
 
 var (
-	_ Node = &HostInfo{}
-	_ Node = &WeightHostInfo{}
+	_ Host = &HostInfo{}
+	_ Host = &WeightHostInfo{}
 )
 
 type HostInfo struct {
-	hostname string
-	state    NodeState
+	Address  string
+	Database string
+
+	State HostState
 }
 
-func (h *HostInfo) Hostname() string {
-	return h.hostname
-}
-
-func (h *HostInfo) State() NodeState {
-	return h.state
-}
-
-func (h HostInfo) SetState(s NodeState) Node {
-	h.state = s
+func (h HostInfo) SetState(s HostState) Host {
+	h.State = s
 	return h
 }
 
@@ -45,45 +41,50 @@ func (h HostInfo) Info() HostInfo {
 	return h
 }
 
-// Creates HostInfo with NodeUp state.
-func NewHostInfo(hostname string) HostInfo {
-	return NewHostInfoWithState(hostname, NodeUp)
+func (h HostInfo) ID() string {
+	return h.Address + h.Database
 }
 
-func NewHostInfoWithState(hostname string, state NodeState) HostInfo {
+func (h HostInfo) String() string {
+	return fmt.Sprintf("Host[addr: %s; db: %s]", h.Address, h.Database)
+}
+
+// Creates HostInfo with HostUp state.
+func NewHostInfo(hostname, database string) HostInfo {
+	return NewHostInfoWithState(hostname, database, HostUp)
+}
+
+func NewHostInfoWithState(hostname, database string, state HostState) HostInfo {
 	return HostInfo{
-		hostname: hostname,
-		state:    state,
+		Address:  hostname,
+		Database: database,
+		State:    state,
 	}
 }
 
 type WeightHostInfo struct {
 	HostInfo
 
-	weight uint32
+	Weight uint32
 }
 
 func (h WeightHostInfo) Info() HostInfo {
 	return h.HostInfo
 }
 
-func (h WeightHostInfo) SetState(s NodeState) Node {
-	h.HostInfo.state = s
+func (h WeightHostInfo) SetState(s HostState) Host {
+	h.HostInfo.State = s
 	return h
 }
 
-func (h *WeightHostInfo) Weight() uint32 {
-	return h.weight
+// Creates WeightHostInfo with HostUp state.
+func NewWeightHostInfo(hostname, database string, weight uint32) WeightHostInfo {
+	return NewWeightHostInfoWithState(hostname, database, weight, HostUp)
 }
 
-// Creates WeightHostInfo with NodeUp state.
-func NewWeightHostInfo(hostname string, weight uint32) WeightHostInfo {
-	return NewWeightHostInfoWithState(hostname, weight, NodeUp)
-}
-
-func NewWeightHostInfoWithState(hostname string, weight uint32, state NodeState) WeightHostInfo {
+func NewWeightHostInfoWithState(hostname, database string, weight uint32, state HostState) WeightHostInfo {
 	return WeightHostInfo{
-		HostInfo: NewHostInfoWithState(hostname, state),
-		weight:   weight,
+		HostInfo: NewHostInfoWithState(hostname, database, state),
+		Weight:   weight,
 	}
 }

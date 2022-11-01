@@ -13,29 +13,29 @@ var (
 	_ HostSelector[WeightHostInfo] = &wRoundRobinSelector{}
 )
 
-type HostStateController[T Node] interface {
+type HostStateController[T Host] interface {
 	AddHost(h T) error
 	RemoveHost(h T) error
 }
 
-type HostSelector[T Node] interface {
+type HostSelector[T Host] interface {
 	HostStateController[T]
 	Pick() HostInfo
 }
 
-func ListenStates[T Node](ctx context.Context, controller HostStateController[T], stch <-chan Node) error {
+func ListenStates[T Host](ctx context.Context, controller HostStateController[T], stch <-chan Host) error {
 	for {
 		select {
 		case h := <-stch:
 			hi := h.Info()
-			switch hi.State() {
-			case NodeUp:
+			switch hi.State {
+			case HostUp:
 				if err := controller.AddHost(h.(T)); err != nil {
-					return fmt.Errorf("add host: %s", err)
+					return fmt.Errorf("add host: %w", err)
 				}
-			case NodeDown:
+			case HostDown:
 				if err := controller.RemoveHost(h.(T)); err != nil {
-					return fmt.Errorf("remove host: %s", err)
+					return fmt.Errorf("remove host: %w", err)
 				}
 			}
 
@@ -84,9 +84,9 @@ func (s *roundRobinSelector) pick() HostInfo {
 }
 
 func (s *roundRobinSelector) addHost(h HostInfo) error {
-	hst := h.Hostname()
-	if st := h.State(); st == NodeDown {
-		return fmt.Errorf("host %s must have %s state, but got %s", hst, NodeUp, st)
+	hst := h.ID()
+	if st := h.State; st == HostDown {
+		return fmt.Errorf("host %s must have %s state, but got %s", h, HostUp, st)
 	}
 
 	if _, ok := s.hosts[hst]; !ok {
@@ -99,10 +99,11 @@ func (s *roundRobinSelector) addHost(h HostInfo) error {
 }
 
 func (s *roundRobinSelector) removeHost(h HostInfo) error {
-	hst := h.Hostname()
-	if st := h.State(); st == NodeUp {
-		return fmt.Errorf("host %s must have %s state, but got %s", hst, NodeDown, st)
+	if st := h.State; st == HostUp {
+		return fmt.Errorf("host %s must have %s state, but got %s", h, HostDown, st)
 	}
+
+	hst := h.ID()
 
 	if _, ok := s.keysPos[hst]; !ok {
 		return nil
@@ -149,7 +150,7 @@ type wRoundRobinSelector struct {
 // Adds host. New weight will affect the distribution.
 // State must have NodeUp.
 func (s *wRoundRobinSelector) AddHost(h WeightHostInfo) error {
-	if h.Weight() == 0 {
+	if h.Weight == 0 {
 		return errors.New("weight must be non zero")
 	}
 
@@ -176,18 +177,21 @@ func (s *wRoundRobinSelector) Pick() HostInfo {
 }
 
 func (s *wRoundRobinSelector) addHost(h WeightHostInfo) error {
-	hst := h.Hostname()
+	if h.State == HostDown {
+		return fmt.Errorf("host %s must have %s state, but got %s", h, HostUp, h.State)
+	}
 
+	hst := h.ID()
 	hinfo, ok := s.hosts[hst]
 	if !ok {
-		newHost := NewWeightHostInfo(hst, h.Weight())
+		newHost := NewWeightHostInfo(h.Address, h.Database, h.Weight)
 		hinfo = &newHost
 		s.hosts[hst] = hinfo
 
 		newRange := struct {
 			begin uint32
 			end   uint32
-		}{0, hinfo.Weight()}
+		}{0, hinfo.Weight}
 
 		if len(s.ranges) != 0 {
 			lastRange := s.ranges[len(s.ranges)-1]
@@ -200,25 +204,21 @@ func (s *wRoundRobinSelector) addHost(h WeightHostInfo) error {
 		s.ranges = append(s.ranges, newRange)
 		s.rangePos[hst] = len(s.ranges) - 1
 
-		for i := uint32(0); i < hinfo.Weight(); i++ {
+		for i := uint32(0); i < hinfo.Weight; i++ {
 			s.owns = append(s.owns, hinfo)
 		}
 	}
 
-	if st := h.State(); st == NodeDown {
-		return fmt.Errorf("host %s must have %s state, but got %s", hst, NodeUp, st)
-	} else {
-		*hinfo = hinfo.SetState(st).(WeightHostInfo)
-	}
+	hinfo.State = h.State
 
-	if hinfo.Weight() == h.Weight() {
+	if hinfo.Weight == h.Weight {
 		return nil
 	}
 
-	diffWeight := h.Weight() - hinfo.Weight()
+	diffWeight := h.Weight - hinfo.Weight
 	// simple case: if host is last then append to owns.
 	if pos := s.rangePos[hst]; pos == len(s.rangePos)-1 {
-		s.owns = s.rebalance(s.owns, hinfo, h.Weight())
+		s.owns = s.rebalance(s.owns, hinfo, h.Weight)
 		s.ranges[pos].end += diffWeight
 	} else {
 		// need shift of subslice
@@ -229,7 +229,7 @@ func (s *wRoundRobinSelector) addHost(h WeightHostInfo) error {
 
 		var curOwns []*WeightHostInfo
 		curOwns = append(curOwns, s.owns[curRange.begin:curRange.end]...)
-		curOwns = s.rebalance(curOwns, hinfo, h.Weight())
+		curOwns = s.rebalance(curOwns, hinfo, h.Weight)
 
 		var owns []*WeightHostInfo
 		owns = append(owns, sub1...)
@@ -245,12 +245,12 @@ func (s *wRoundRobinSelector) addHost(h WeightHostInfo) error {
 		}
 	}
 
-	hinfo.weight = h.Weight()
+	hinfo.Weight = h.Weight
 	return nil
 }
 
 func (s *wRoundRobinSelector) rebalance(owns []*WeightHostInfo, h *WeightHostInfo, newWeight uint32) []*WeightHostInfo {
-	diffWeight := int32(newWeight - h.Weight())
+	diffWeight := int32(newWeight - h.Weight)
 	if diffWeight > 0 {
 		for i := int32(0); i < diffWeight; i++ {
 			owns = append(owns, h)
@@ -263,17 +263,17 @@ func (s *wRoundRobinSelector) rebalance(owns []*WeightHostInfo, h *WeightHostInf
 }
 
 func (s *wRoundRobinSelector) removeHost(h WeightHostInfo) error {
-	hst := h.Hostname()
-	if st := h.State(); st == NodeUp {
-		return fmt.Errorf("host %s must have %s state, but got %s", hst, NodeDown, st)
+	if st := h.State; st == HostUp {
+		return fmt.Errorf("host %s must have %s state, but got %s", h, HostDown, st)
 	}
+	hst := h.ID()
 
 	hinfo, ok := s.hosts[hst]
 	if !ok {
 		return nil
 	}
 
-	*hinfo = hinfo.SetState(h.State()).(WeightHostInfo)
+	*hinfo = hinfo.SetState(h.State).(WeightHostInfo)
 
 	return nil
 }
@@ -298,10 +298,10 @@ func (s *wRoundRobinSelector) pick() HostInfo {
 		s.currentIdx = (s.currentIdx + 1) % math.MaxUint32
 		h = s.owns[idx]
 
-		if h.State() == NodeDown {
+		if h.State == HostDown {
 			downCnt++
 
-			pos := s.rangePos[h.Hostname()]
+			pos := s.rangePos[h.ID()]
 			s.currentIdx = s.ranges[pos].end
 		} else {
 			break
