@@ -68,6 +68,7 @@ func (s *shard[T]) start(
 		atomic.AddInt32(&wg, 1)
 		go func() {
 			defer atomic.AddInt32(&wg, -1)
+			defer s.pool.put(b)
 
 			err := s.client.Do(ctx, ch.Query{
 				Body:  b.input.Into(table),
@@ -87,8 +88,6 @@ func (s *shard[T]) start(
 				errs <- err
 				return
 			}
-
-			s.pool.put(b)
 		}()
 	}
 
@@ -99,7 +98,6 @@ loop:
 			b.append(v)
 		case sharedBatch := <-sharedBatches:
 			execQuery(sharedBatch)
-			s.pool.put(sharedBatch)
 		case <-t.C:
 			execQuery(b)
 
